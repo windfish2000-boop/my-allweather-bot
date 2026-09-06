@@ -10,22 +10,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-          
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install pandas yfinance requests
-          pip install pykrx || echo "pykrx install failed, will use yfinance fallback"
-
+          pip install pandas yfinance requests pykrx
       - name: Run Allweather v7.1
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
-        run: |
-          ls -la *.py
-          python Telegram-Allweather-Th-V7.1.py || python v7_1_final.py || python final_Telegram-Allweather-Th.py
+        run: python Telegram-Allweather-Th.py
