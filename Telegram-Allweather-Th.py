@@ -1,7 +1,8 @@
-import requests, os, datetime, pandas as pd, yfinance as yf
+import requests, os, datetime, json, pandas as pd, yfinance as yf
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
+HOLDINGS_FILE = "holdings.json"
 
 def send_telegram(text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -68,8 +69,8 @@ if __name__ == "__main__":
     names = {"SP500":"360750 TIGER S&P500","GOLD":"411060 TIGER 골드","BOND":"305080 TIGER 미국채10년"}
     inv_names = {"SP500":"114800 KODEX 인버스", "BOND":"176950 KODEX 국채선물10년인버스"}
 
-    msg = f"📈 {today_str} 올웨더 100만원 v7.1 완전판\n"
-    msg += f"🇹🇭08:50 🇰🇷10:50 | 쌍방향+위성 포함\n"
+    msg = f"📈 {today_str} 올웨더 100만원 v7.2 위성매도 포함\n"
+    msg += f"🇹🇭08:50 🇰🇷10:50 | 코어쌍방향+위성매도\n"
     msg += f"\n[코어 80만원 - 26.6만원씩]\n"
     
     cash_core = 0
@@ -107,7 +108,8 @@ if __name__ == "__main__":
 
     msg += f"\n💰 코어 현금대기: {cash_core//10000}만원\n"
     
-    msg += f"\n[위성 20만원 - Top3 모멘텀]\n"
+    # === 위성 로직 v7.2: 매도 포함 ===
+    msg += f"\n[위성 20만원 - Top3 모멘텀 + 매도신호]\n"
     tickers = {"SK하이닉스":("000660","000660.KS"),"삼성전자":("005930","005930.KS"),"KB금융":("105560","105560.KS"),"현대차":("005380","005380.KS"),"삼성SDI":("006400","006400.KS"),"하나금융":("086790","086790.KS")}
     results=[]
     for name, (kr_code, yf_code) in tickers.items():
@@ -122,19 +124,59 @@ if __name__ == "__main__":
         results.append((name, score, price_now, kr_code))
     results.sort(key=lambda x: x[1], reverse=True)
     top3 = results[:3]
-    
+    top3_codes = [r[3] for r in top3]
+
+    # 이전 보유 로드
+    prev_codes = []
+    if os.path.exists(HOLDINGS_FILE):
+        try:
+            with open(HOLDINGS_FILE, 'r') as f:
+                prev = json.load(f)
+                prev_codes = prev.get("satellite", [])
+        except: pass
+
+    # 매도 판정: 이전에 있었는데 오늘 Top3에 없으면 매도
+    sell_list = [c for c in prev_codes if c not in top3_codes]
+    if prev_codes and sell_list:
+        for code in sell_list:
+            # 이름 찾기
+            name_sell = next((k for k,v in tickers.items() if v[0]==code), code)
+            msg += f"🔴 {name_sell}({code}) 전량 매도 - Top3 탈락!\n"
+            msg += f" └ 👉 보유분 전량 매도 후 현금 확보\n"
+            msg += f" └ 20일선 이탈 또는 모멘텀 순위 하락\n"
+    elif prev_codes and not sell_list:
+        msg += f"✅ 위성 매도 없음 - Top3 유지\n"
+
     if top3:
         each = SAT_TOTAL // len(top3)
         for i,(name,score,price_now,kr_code) in enumerate(top3,1):
+            is_new = kr_code not in prev_codes
             shares = each / price_now
-            msg += f"{i}. {name}({kr_code}) Score{score*100:.1f}%\n"
-            msg += f" └ 👉 {each//10000}만원 → {price_now:.0f}원 x {shares:.4f}주 소수점 매수\n"
+            if is_new and prev_codes:
+                msg += f"🟢 {i}. {name}({kr_code}) 신규 매수 Score{score*100:.1f}%\n"
+            elif not prev_codes:
+                msg += f"{i}. {name}({kr_code}) Score{score*100:.1f}% (최초매수)\n"
+            else:
+                msg += f"🔵 {i}. {name}({kr_code}) 보유 유지 Score{score*100:.1f}%\n"
+            msg += f" └ 👉 {each//10000}만원 → {price_now:.0f}원 x {shares:.4f}주\n"
             msg += f" └ 20일선 위 + 3/6개월 모멘텀 상위\n"
-        msg += f"\n └ 🔄 위성은 매일 Top3 변경시 리밸런싱: 기존종목 매도 후 신규종목 매수\n"
+        
+        if prev_codes:
+            buy_cnt = len([c for c in top3_codes if c not in prev_codes])
+            msg += f"\n └ 🔄 위성 리밸런싱: 매도 {len(sell_list)}개 / 신규매수 {buy_cnt}개 / 유지 {len(top3_codes)-buy_cnt}개\n"
+        else:
+            msg += f"\n └ 🔄 위성은 매일 Top3 변경시 리밸런싱: 기존종목 매도 후 신규종목 매수\n"
+            msg += f" └ 💡 다음부터는 매도 종목이 자동 표시됩니다 (holdings.json 저장됨)\n"
     else:
         msg += "Top3 없음 → ⛔ 위성도 진입금지\n"
         msg += " └ 🔴 보유중이면 위성 전량 매도! 현금 20만원 대기\n"
 
-    msg += f"\n룰: 🟢매수 🔴매도 🟡현금 | 추세반전시 원본↔인버스 자동교체\n"
+    # 현재 Top3 저장
+    try:
+        with open(HOLDINGS_FILE, 'w') as f:
+            json.dump({"satellite": top3_codes, "date": today_str}, f)
+    except: pass
+
+    msg += f"\n룰: 🟢매수 🔴매도 🔵유지 🟡현금 | 코어:원본↔인버스 자동교체 위성:Top3탈락시 자동매도\n"
     print(msg)
     send_telegram(msg)
