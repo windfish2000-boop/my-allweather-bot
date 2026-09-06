@@ -2,7 +2,7 @@ name: Daily Allweather Alert TH Time v4
 
 on:
   schedule:
-    - cron: '50 1 * * 1-5'  # 태국 08:50 = UTC 01:50 월-금
+    - cron: '50 1 * * 1-5'
   workflow_dispatch:
 
 jobs:
