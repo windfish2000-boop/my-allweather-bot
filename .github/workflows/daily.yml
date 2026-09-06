@@ -1,4 +1,4 @@
-name: Daily Allweather Alert TH Time v5.1
+name: Daily Allweather Alert TH Time v6.0
 
 on:
   schedule:
@@ -9,15 +9,15 @@ jobs:
   send-alert:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      - name: Install dependencies v5.1
+      - name: Install dependencies v6.0
         run: |
           pip install --upgrade pip
-          pip install requests yfinance pandas
-      - name: Run Telegram Bot v5.1 Top3 + RSI
+          pip install requests yfinance pandas pykrx
+      - name: Run Telegram Bot v6.0 Improved
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
