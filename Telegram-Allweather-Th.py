@@ -130,3 +130,4 @@ if __name__ == "__main__":
     msg += f"\n_v5.1 검증완료: 200일선+RSI로 가짜신호 70% 차단_"
     print(msg)
     send_telegram(msg)
+
