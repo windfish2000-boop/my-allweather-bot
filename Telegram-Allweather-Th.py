@@ -60,6 +60,7 @@ def core_signal(df_close, asset_type):
         else: return "인버스 전환", f"채권 하락 → 금리상승 베팅", price, ma200, r, False, True
 
 CORE_EACH = 800000 // 3
+SAT_TOTAL = 200000
 
 if __name__ == "__main__":
     today_str = datetime.datetime.now().strftime("%m/%d")
@@ -67,9 +68,9 @@ if __name__ == "__main__":
     names = {"SP500":"360750 TIGER S&P500","GOLD":"411060 TIGER 골드","BOND":"305080 TIGER 미국채10년"}
     inv_names = {"SP500":"114800 KODEX 인버스", "BOND":"176950 KODEX 국채선물10년인버스"}
 
-    msg = f"📈 {today_str} 올웨더 100만원 v7.0 쌍방향 청산\n"
-    msg += f"🇹🇭08:50 🇰🇷10:50 | 인버스 매도 로직 추가\n"
-    msg += f"\n[코어 80만원]\n"
+    msg = f"📈 {today_str} 올웨더 100만원 v7.1 완전판\n"
+    msg += f"🇹🇭08:50 🇰🇷10:50 | 쌍방향+위성 포함\n"
+    msg += f"\n[코어 80만원 - 26.6만원씩]\n"
     
     cash_core = 0
     for asset in ["SP500","GOLD","BOND"]:
@@ -80,10 +81,9 @@ if __name__ == "__main__":
         inv_name = inv_names.get(asset, "")
         
         if is_buy:
-            # 추세가 바뀌면 인버스 매도 문구 표시!
             cur_price = get_price_pykrx(kr) or price
             shares = CORE_EACH / cur_price
-            msg += f"🟢 {names[asset]}: {sig} (인버스 → 원본 복귀)\n"
+            msg += f"🟢 {names[asset]}: {sig}\n"
             if inv:
                 msg += f" └ 🔴 보유중이면 {inv_name} {inv} 전량 매도! (인버스 청산)\n"
             msg += f" └ 👉 {CORE_EACH//10000}만원 → {cur_price:.0f}원 x {shares:.3f}주 원본 신규 매수\n"
@@ -97,12 +97,44 @@ if __name__ == "__main__":
             msg += f" └ {reason}\n"
         else:
             msg += f"🟡 {names[asset]}: {sig}\n"
-            msg += f" └ 🔴 보유중이면 {names[asset]} + {inv_name} 모두 전량 매도!\n"
+            if asset == "GOLD":
+                msg += f" └ 🔴 보유중이면 {names[asset]} 전량 매도!\n"
+            else:
+                msg += f" └ 🔴 보유중이면 {names[asset]} + {inv_name} 모두 전량 매도!\n"
             msg += f" └ ⛔ 현금 {CORE_EACH//10000}만원 대기\n"
             msg += f" └ {reason}\n"
             cash_core += CORE_EACH
 
     msg += f"\n💰 코어 현금대기: {cash_core//10000}만원\n"
-    msg += f"\n룰: 추세반전시 원본↔인버스 자동 교체, 휩소시 모두 매도 후 현금\n"
+    
+    msg += f"\n[위성 20만원 - Top3 모멘텀]\n"
+    tickers = {"SK하이닉스":("000660","000660.KS"),"삼성전자":("005930","005930.KS"),"KB금융":("105560","105560.KS"),"현대차":("005380","005380.KS"),"삼성SDI":("006400","006400.KS"),"하나금융":("086790","086790.KS")}
+    results=[]
+    for name, (kr_code, yf_code) in tickers.items():
+        c = yf.download(yf_code, period="1y", progress=False, auto_adjust=True)
+        if c.empty: continue
+        close = c['Close'].iloc[:,0] if isinstance(c.columns, pd.MultiIndex) else c['Close']
+        if len(close)<130: continue
+        mom3 = float(close.iloc[-1]/close.iloc[-63]-1); mom6 = float(close.iloc[-1]/close.iloc[-126]-1)
+        score=(mom3+mom6)/2; ma20=float(close.rolling(20).mean().iloc[-1])
+        if float(close.iloc[-1]) < ma20: continue
+        price_now = get_price_pykrx(kr_code) or float(close.iloc[-1])
+        results.append((name, score, price_now, kr_code))
+    results.sort(key=lambda x: x[1], reverse=True)
+    top3 = results[:3]
+    
+    if top3:
+        each = SAT_TOTAL // len(top3)
+        for i,(name,score,price_now,kr_code) in enumerate(top3,1):
+            shares = each / price_now
+            msg += f"{i}. {name}({kr_code}) Score{score*100:.1f}%\n"
+            msg += f" └ 👉 {each//10000}만원 → {price_now:.0f}원 x {shares:.4f}주 소수점 매수\n"
+            msg += f" └ 20일선 위 + 3/6개월 모멘텀 상위\n"
+        msg += f"\n └ 🔄 위성은 매일 Top3 변경시 리밸런싱: 기존종목 매도 후 신규종목 매수\n"
+    else:
+        msg += "Top3 없음 → ⛔ 위성도 진입금지\n"
+        msg += " └ 🔴 보유중이면 위성 전량 매도! 현금 20만원 대기\n"
+
+    msg += f"\n룰: 🟢매수 🔴매도 🟡현금 | 추세반전시 원본↔인버스 자동교체\n"
     print(msg)
     send_telegram(msg)
