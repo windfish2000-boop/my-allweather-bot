@@ -1,24 +1,24 @@
-name: Daily Allweather Alert TH Time v6.2 B
+name: Daily Allweather Alert TH Time v7.1 완전판
 
 on:
   schedule:
-    - cron: '50 1 * * 1-5'
+    - cron: '50 1 * * 1-5'  # 🇹🇭08:50 🇰🇷10:50
   workflow_dispatch:
 
 jobs:
-  send-alert:
+  alert:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-      - name: Install dependencies v6.2
+      - name: Install dependencies
         run: |
-          pip install --upgrade pip
-          pip install requests yfinance pandas pykrx
-      - name: Run Telegram Bot v6.2 B option
+          pip install pykrx pandas yfinance requests
+      - name: Run Allweather v7.1
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
-        run: python "Telegram-Allweather-Th.py"
+        run: python v7_1_final.py
