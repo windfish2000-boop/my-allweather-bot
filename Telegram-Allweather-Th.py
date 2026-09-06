@@ -32,7 +32,6 @@ def get_close(kr_ticker, proxy):
     return close, False
 
 def get_price_only(ticker_kr):
-    # 주수 계산용 현재가 (pykrx)
     try:
         from pykrx import stock
         import datetime as dt
@@ -41,7 +40,6 @@ def get_price_only(ticker_kr):
         if not df.empty:
             return float(df['종가'].iloc[-1])
     except: pass
-    # yfinance fallback
     try:
         df = yf.download(ticker_kr + ".KS", period="5d", progress=False, auto_adjust=True)
         if not df.empty:
@@ -61,13 +59,13 @@ def core_signal(df_close, asset_type):
     elif asset_type == 'GOLD':
         if price > ma200 and r > 55: return "매수/보유", f"골드 강세 RSI {r:.0f}", price, ma200, r, True, False
         else: return "관망", f"골드 관망 RSI {r:.0f} 진입금지", price, ma200, r, False, False
-    else: # BOND
+    else:
         if price > ma200: return "매수/보유", f"채권 상승", price, ma200, r, True, False
         else: return "인버스 전환", f"채권 하락 → 금리상승 베팅", price, ma200, r, False, True
 
 TOTAL = 1000000
 CORE_TOTAL = 800000
-CORE_EACH = CORE_TOTAL // 3  # 266,666원
+CORE_EACH = CORE_TOTAL // 3
 SAT_TOTAL = 200000
 
 if __name__ == "__main__":
@@ -75,9 +73,9 @@ if __name__ == "__main__":
     assets = {"SP500": ("360750","SPY","114800"), "GOLD": ("411060","GLD",None), "BOND": ("305080","TLT","225130")}
     names = {"SP500":"360750 TIGER S&P500","GOLD":"411060 TIGER 골드","BOND":"305080 TIGER 미국채10년"}
 
-    msg = f"📈 {today_str} 올웨더 100만원 v6.3 주수버전\n"
-    msg += f"🇹🇭08:50 🇰🇷10:50 | 진입 타이밍일 때만 매수\n"
-    msg += f"\n[코어 80만원 - 26.6만원씩 3분할]\n"
+    msg = f"📈 {today_str} 올웨더 100만원 v6.5 소수점 최종\n"
+    msg += f"🇹🇭08:50 🇰🇷10:50 | 소수점 매수 가능\n"
+    msg += f"\n[코어 80만원 - 26.6만원씩]\n"
     
     cash_core = 0
     for asset in ["SP500","GOLD","BOND"]:
@@ -85,21 +83,19 @@ if __name__ == "__main__":
         close, is_direct = get_close(kr, proxy)
         if close is None: continue
         sig, reason, price, ma200, rsi, is_buy, is_inv = core_signal(close, asset)
-        
         if is_buy:
-            # 롱 매수
             cur_price = get_price_only(kr) or price
-            shares = int(CORE_EACH // cur_price)
+            shares = CORE_EACH / cur_price
             msg += f"🟢 {names[asset]}: {sig}\n"
-            msg += f" └ 👉 {CORE_EACH//10000}만원 → {cur_price:.0f}원 x {shares}주 매수 진입\n"
+            msg += f" └ 👉 {CORE_EACH//10000}만원 → {cur_price:.0f}원 x {shares:.3f}주 매수 진입\n"
             msg += f" └ {reason} | {price:.0f}/{ma200:.0f}/RSI{rsi:.0f}\n"
         elif is_inv:
             inv_name = "114800 KODEX 인버스" if asset=="SP500" else "225130 KODEX 미국채10년선물인버스"
             inv_ticker = inv
             cur_price = get_price_only(inv_ticker) or 7000
-            shares = int(CORE_EACH // cur_price)
+            shares = CORE_EACH / cur_price
             msg += f"🔵 {names[asset]} → {inv_name}: {sig}\n"
-            msg += f" └ 👉 {CORE_EACH//10000}만원 → {cur_price:.0f}원 x {shares}주 인버스 진입\n"
+            msg += f" └ 👉 {CORE_EACH//10000}만원 → {cur_price:.0f}원 x {shares:.3f}주 인버스 진입\n"
             msg += f" └ {reason} | {price:.0f}/{ma200:.0f}/RSI{rsi:.0f}\n"
         else:
             msg += f"🟡 {names[asset]}: {sig}\n"
@@ -108,9 +104,7 @@ if __name__ == "__main__":
             cash_core += CORE_EACH
 
     msg += f"\n💰 코어 현금대기: {cash_core//10000}만원\n"
-
-    # 위성
-    msg += f"\n[위성 20만원 - 매수신호일 때만 진입]\n"
+    msg += f"\n[위성 20만원 - Top3 소수점 분산]\n"
     tickers = {"SK하이닉스":"000660.KS","삼성SDI":"006400.KS","하나금융지주":"086790.KS","KB금융":"105560.KS","현대차":"005380.KS"}
     results=[]
     for name, t in tickers.items():
@@ -122,22 +116,20 @@ if __name__ == "__main__":
         score=(mom3+mom6)/2; ma20=float(close.rolling(20).mean().iloc[-1])
         if float(close.iloc[-1]) < ma20: continue
         price_now = float(close.iloc[-1])
-        results.append((name, score, mom3, mom6, price_now))
+        results.append((name, score, price_now))
     results.sort(key=lambda x: x[1], reverse=True)
     top3 = results[:3]
     
     if top3:
         each = SAT_TOTAL // len(top3)
-        for i,(name,score,m3,m6,price_now) in enumerate(top3,1):
-            shares = int(each // price_now)
-            if shares==0:
-                msg += f"{i}. {name} Score{score*100:.1f}% → {each//10000}만원으로 {shares}주 불가 → 소수점 또는 1주만\n"
-            else:
-                msg += f"{i}. {name} Score{score*100:.1f}% → 👉 {each//10000}만원 {price_now:.0f}원 x {shares}주 매수\n"
+        for i,(name,score,price_now) in enumerate(top3,1):
+            shares = each / price_now
+            msg += f"{i}. {name} Score{score*100:.1f}%\n"
+            msg += f" └ 👉 {each//10000}만원 → {price_now:.0f}원 x {shares:.4f}주 소수점 매수\n"
     else:
-        msg += "Top3 없음 → ⛔ 위성도 진입금지 / 현금 20만원 대기\n"
-        msg += "→ 대안: 114800 인버스 20만원 고려\n"
+        msg += "Top3 없음 → ⛔ 위성도 진입금지\n"
+        msg += " └ 👉 현금 20만원 대기 or 114800 인버스 20만원 고려\n"
 
-    msg += f"\n룰: 관망 뜨면 절대 추격매수 금지, 신호가 매수/인버스로 바뀔 때만 주수대로 진입\n"
+    msg += f"\n룰: 관망=현금대기, 👉 뜰때만 소수점 주수대로 진입\n"
     print(msg)
     send_telegram(msg)
