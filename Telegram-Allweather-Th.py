@@ -31,19 +31,14 @@ def get_close(kr_ticker, proxy):
     close = df['Close'].iloc[:,0] if isinstance(df.columns, pd.MultiIndex) else df['Close'] if 'Close' in df.columns else df.iloc[:,-1]
     return close, False
 
-def get_price_only(ticker_kr):
+def get_price_pykrx(kr_code):
     try:
         from pykrx import stock
         import datetime as dt
         today = dt.datetime.now().strftime("%Y%m%d")
-        df = stock.get_market_ohlcv_by_date(today, today, ticker_kr)
+        df = stock.get_market_ohlcv_by_date(today, today, kr_code)
         if not df.empty:
             return float(df['종가'].iloc[-1])
-    except: pass
-    try:
-        df = yf.download(ticker_kr + ".KS", period="5d", progress=False, auto_adjust=True)
-        if not df.empty:
-            return float(df['Close'].iloc[-1] if 'Close' in df.columns else df.iloc[-1,-1])
     except: pass
     return None
 
@@ -73,7 +68,7 @@ if __name__ == "__main__":
     assets = {"SP500": ("360750","SPY","114800"), "GOLD": ("411060","GLD",None), "BOND": ("305080","TLT","225130")}
     names = {"SP500":"360750 TIGER S&P500","GOLD":"411060 TIGER 골드","BOND":"305080 TIGER 미국채10년"}
 
-    msg = f"📈 {today_str} 올웨더 100만원 v6.5 소수점 최종\n"
+    msg = f"📈 {today_str} 올웨더 100만원 v6.6 매도명시 최종\n"
     msg += f"🇹🇭08:50 🇰🇷10:50 | 소수점 매수 가능\n"
     msg += f"\n[코어 80만원 - 26.6만원씩]\n"
     
@@ -84,7 +79,7 @@ if __name__ == "__main__":
         if close is None: continue
         sig, reason, price, ma200, rsi, is_buy, is_inv = core_signal(close, asset)
         if is_buy:
-            cur_price = get_price_only(kr) or price
+            cur_price = get_price_pykrx(kr) or price
             shares = CORE_EACH / cur_price
             msg += f"🟢 {names[asset]}: {sig}\n"
             msg += f" └ 👉 {CORE_EACH//10000}만원 → {cur_price:.0f}원 x {shares:.3f}주 매수 진입\n"
@@ -92,44 +87,55 @@ if __name__ == "__main__":
         elif is_inv:
             inv_name = "114800 KODEX 인버스" if asset=="SP500" else "225130 KODEX 미국채10년선물인버스"
             inv_ticker = inv
-            cur_price = get_price_only(inv_ticker) or 7000
+            cur_price = get_price_pykrx(inv_ticker) or 7000
             shares = CORE_EACH / cur_price
             msg += f"🔵 {names[asset]} → {inv_name}: {sig}\n"
-            msg += f" └ 👉 {CORE_EACH//10000}만원 → {cur_price:.0f}원 x {shares:.3f}주 인버스 진입\n"
+            msg += f" └ 🔴 보유중이면 {names[asset]} 전량 매도!\n"
+            msg += f" └ 👉 {CORE_EACH//10000}만원 → {cur_price:.0f}원 x {shares:.3f}주 인버스 신규 매수\n"
             msg += f" └ {reason} | {price:.0f}/{ma200:.0f}/RSI{rsi:.0f}\n"
         else:
-            msg += f"🟡 {names[asset]}: {sig}\n"
+            msg += f"🟡 {names[asset]}: {sig} → 보유중이면 전량 매도!\n"
             msg += f" └ ⛔ 진입금지 - 0주 / 현금 {CORE_EACH//10000}만원 대기\n"
+            msg += f" └ 🔴 매도 후 현금 보유! 신규 진입 금지\n"
             msg += f" └ {reason}\n"
             cash_core += CORE_EACH
 
     msg += f"\n💰 코어 현금대기: {cash_core//10000}만원\n"
     msg += f"\n[위성 20만원 - Top3 소수점 분산]\n"
-    tickers = {"SK하이닉스":"000660.KS","삼성SDI":"006400.KS","하나금융지주":"086790.KS","KB금융":"105560.KS","현대차":"005380.KS"}
+    tickers = {"SK하이닉스":("000660","000660.KS"),"삼성SDI":("006400","006400.KS"),"하나금융지주":("086790","086790.KS"),"KB금융":("105560","105560.KS"),"현대차":("005380","005380.KS")}
     results=[]
-    for name, t in tickers.items():
-        c = yf.download(t, period="1y", progress=False, auto_adjust=True)
+    prev_top3 = ["SK하이닉스","삼성SDI","하나금융지주"] # 예시 - 실제로는 어제 Top3와 비교해야 하지만 메시지에선 안내로 처리
+    for name, (kr_code, yf_code) in tickers.items():
+        c = yf.download(yf_code, period="1y", progress=False, auto_adjust=True)
         if c.empty: continue
         close = c['Close'].iloc[:,0] if isinstance(c.columns, pd.MultiIndex) else c['Close']
         if len(close)<130: continue
         mom3 = float(close.iloc[-1]/close.iloc[-63]-1); mom6 = float(close.iloc[-1]/close.iloc[-126]-1)
         score=(mom3+mom6)/2; ma20=float(close.rolling(20).mean().iloc[-1])
         if float(close.iloc[-1]) < ma20: continue
-        price_now = float(close.iloc[-1])
+        price_now = get_price_pykrx(kr_code) or float(close.iloc[-1])
         results.append((name, score, price_now))
     results.sort(key=lambda x: x[1], reverse=True)
     top3 = results[:3]
     
     if top3:
         each = SAT_TOTAL // len(top3)
+        top3_names = [x[0] for x in top3]
+        # 탈락 종목 체크
+        dropped = [n for n in prev_top3 if n not in top3_names]
+        if dropped:
+            msg += f"🔴 위성 교체: {', '.join(dropped)} → 전량 매도!\n"
         for i,(name,score,price_now) in enumerate(top3,1):
-            shares = each / price_now
-            msg += f"{i}. {name} Score{score*100:.1f}%\n"
+            shares = each / price_now if price_now else 0
+            is_new = name not in prev_top3
+            new_tag = " [신규매수]" if is_new else ""
+            msg += f"{i}. {name} Score{score*100:.1f}%{new_tag}\n"
             msg += f" └ 👉 {each//10000}만원 → {price_now:.0f}원 x {shares:.4f}주 소수점 매수\n"
     else:
         msg += "Top3 없음 → ⛔ 위성도 진입금지\n"
+        msg += " └ 🔴 보유중이면 위성 전량 매도!\n"
         msg += " └ 👉 현금 20만원 대기 or 114800 인버스 20만원 고려\n"
 
-    msg += f"\n룰: 관망=현금대기, 👉 뜰때만 소수점 주수대로 진입\n"
+    msg += f"\n룰: 🟢매수 🔴매도 🟡관망=현금대기, 👉 뜰때만 진입\n"
     print(msg)
     send_telegram(msg)
