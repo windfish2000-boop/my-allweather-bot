@@ -64,18 +64,12 @@ SAT_TOTAL = 200000
 
 if __name__ == "__main__":
     today_str = datetime.datetime.now().strftime("%m/%d")
-    # 고거래량 버전: KODEX/TIGER 위주로 재구성
-    # 114800 KODEX 인버스 - 일 2억주 거래, TIGER 인버스 123310 - 일 3000만주
-    # 채권은 미국채 인버스 대신 거래량 많은 KODEX 국고채10년선물인버스 157450 사용 (또는 현금대기)
-    assets = {"SP500": ("360750","SPY","114800"), "GOLD": ("411060","GLD",None), "BOND": ("305080","TLT","157450")}
+    assets = {"SP500": ("360750","SPY","114800"), "GOLD": ("411060","GLD",None), "BOND": ("305080","TLT","176950")}
     names = {"SP500":"360750 TIGER S&P500","GOLD":"411060 TIGER 골드","BOND":"305080 TIGER 미국채10년"}
-    inv_names = {
-        "SP500":"114800 KODEX 인버스 [거래량 2억주]",
-        "BOND":"157450 KODEX 국고채10년선물인버스 [거래량 50만주] - 미국채 하락시 국고채도 하락동조"
-    }
+    inv_names = {"SP500":"114800 KODEX 인버스", "BOND":"176950 KODEX 국채선물10년인버스"}
 
-    msg = f"📈 {today_str} 올웨더 100만원 v6.8 고거래량 최종\n"
-    msg += f"🇹🇭08:50 🇰🇷10:50 | KODEX/TIGER 고유동성\n"
+    msg = f"📈 {today_str} 올웨더 100만원 v6.9 티커정정 최종\n"
+    msg += f"🇹🇭08:50 🇰🇷10:50 | 고유동성 KODEX\n"
     msg += f"\n[코어 80만원 - 26.6만원씩]\n"
     
     cash_core = 0
@@ -92,7 +86,7 @@ if __name__ == "__main__":
             msg += f" └ {reason}\n"
         elif is_inv:
             inv_name = inv_names[asset]
-            cur_price = get_price_pykrx(inv) or 4000
+            cur_price = get_price_pykrx(inv) or 50000
             shares = CORE_EACH / cur_price
             msg += f"🔵 {names[asset]} → {inv_name}: {sig}\n"
             msg += f" └ 🔴 보유중이면 {names[asset]} 전량 매도!\n"
@@ -106,7 +100,7 @@ if __name__ == "__main__":
             cash_core += CORE_EACH
 
     msg += f"\n💰 코어 현금대기: {cash_core//10000}만원\n"
-    msg += f"\n[위성 20만원 - Top3 고거래량 종목만]\n"
+    msg += f"\n[위성 20만원 - Top3]\n"
     tickers = {"SK하이닉스":("000660","000660.KS"),"삼성전자":("005930","005930.KS"),"KB금융":("105560","105560.KS"),"현대차":("005380","005380.KS"),"삼성SDI":("006400","006400.KS")}
     results=[]
     for name, (kr_code, yf_code) in tickers.items():
@@ -129,8 +123,8 @@ if __name__ == "__main__":
             msg += f"{i}. {name} Score{score*100:.1f}%\n"
             msg += f" └ 👉 {each//10000}만원 → {price_now:.0f}원 x {shares:.4f}주\n"
     else:
-        msg += "Top3 없음 → ⛔ 위성 현금 대기\n"
+        msg += "Top3 없음 → 위성 현금 대기\n"
 
-    msg += f"\n룰: 🟢매수 🔴매도 🟡현금대기 | KODEX/TIGER 고거래량으로 체결 잘됨\n"
+    msg += f"\n룰: 🟢매수 🔴매도 🟡현금대기 | 채권인버스=176950 KODEX\n"
     print(msg)
     send_telegram(msg)
