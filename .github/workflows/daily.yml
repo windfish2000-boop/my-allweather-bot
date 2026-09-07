@@ -2,35 +2,34 @@ name: Daily Allweather Alert TH Time v7.2 위성매도 포함
 
 on:
   schedule:
-    - cron: '50 1 * * 1-5'
+    - cron: '50 1 * * 1-5' # 매일 08:50 TH = 01:50 UTC, 월-금
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   alert:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-          
+          cache: 'pip'
       - name: Install dependencies
         run: |
           pip install --upgrade pip
           pip install pandas yfinance requests pykrx
-
       - name: Run Allweather v7.2
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python Telegram-Allweather-Th.py
-
       - name: Save holdings for next satellite sell signal
         run: |
-          git config --global user.name "bot"
-          git config --global user.email "bot@github.com"
-          git add holdings.json || echo "no holdings yet"
-          git commit -m "update holdings.json" || echo "no changes"
-          git push || echo "push failed"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add holdings.json || echo "no holdings file"
+          git diff --staged --quiet || git commit -m "update holdings.json [skip ci]"
+          git push
